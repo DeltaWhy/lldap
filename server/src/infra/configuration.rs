@@ -102,6 +102,8 @@ pub struct Configuration {
     pub ldaps_options: LdapsOptions,
     #[builder(default = r#"String::from("http://localhost")"#)]
     pub http_url: String,
+    #[builder(default = r#"String::from("/")"#)]
+    pub http_base: String,
     #[serde(skip)]
     #[builder(field(private), default = "None")]
     server_setup: Option<ServerSetup>,

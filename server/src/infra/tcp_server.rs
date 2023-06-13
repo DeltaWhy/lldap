@@ -87,6 +87,7 @@ fn http_config<Backend>(
     jwt_secret: secstr::SecUtf8,
     jwt_blacklist: HashSet<u64>,
     server_url: String,
+    base_path: String,
     mail_options: MailOptions,
 ) where
     Backend: TcpBackendHandler + BackendHandler + LoginHandler + OpaqueHandler + Clone + 'static,
@@ -100,29 +101,29 @@ fn http_config<Backend>(
         mail_options,
     }))
     .route(
-        "/health",
+        format!("{}health", base_path).as_str(),
         web::get().to(|| async { HttpResponse::Ok().finish() }),
     )
     .service(
-        web::scope("/auth")
+        web::scope(format!("{}auth", base_path).as_str())
             .configure(|cfg| auth_service::configure_server::<Backend>(cfg, enable_password_reset)),
     )
     // API endpoint.
     .service(
-        web::scope("/api")
+        web::scope(format!("{}api", base_path).as_str())
             .wrap(auth_service::CookieToHeaderTranslatorFactory)
             .configure(super::graphql::api::configure_endpoint::<Backend>),
     )
     .service(
-        web::resource("/pkg/lldap_app_bg.wasm.gz").route(web::route().to(wasm_handler_compressed)),
+        web::resource(format!("{}pkg/lldap_app_bg.wasm.gz", base_path).as_str()).route(web::route().to(wasm_handler_compressed)),
     )
-    .service(web::resource("/pkg/lldap_app_bg.wasm").route(web::route().to(wasm_handler)))
+    .service(web::resource(format!("{}pkg/lldap_app_bg.wasm", base_path).as_str()).route(web::route().to(wasm_handler)))
     // Serve the /pkg path with the compiled WASM app.
-    .service(Files::new("/pkg", "./app/pkg"))
+    .service(Files::new(format!("{}pkg", base_path).as_str(), "./app/pkg"))
     // Serve static files
-    .service(Files::new("/static", "./app/static"))
+    .service(Files::new(format!("{}static", base_path).as_str(), "./app/static"))
     // Serve static fonts
-    .service(Files::new("/static/fonts", "./app/static/fonts"))
+    .service(Files::new(format!("{}static/fonts", base_path).as_str(), "./app/static/fonts"))
     // Default to serve index.html for unknown routes, to support routing.
     .default_service(web::route().guard(guard::Get()).to(index));
 }
@@ -172,6 +173,7 @@ where
     let server_url = config.http_url.clone();
     let mail_options = config.smtp_options.clone();
     let verbose = config.verbose;
+    let base_path = config.http_base.clone();
     info!("Starting the API/web server on port {}", config.http_port);
     server_builder
         .bind(
@@ -183,6 +185,7 @@ where
                 let jwt_blacklist = jwt_blacklist.clone();
                 let server_url = server_url.clone();
                 let mail_options = mail_options.clone();
+                let base_path = base_path.clone();
                 HttpServiceBuilder::default()
                     .finish(map_config(
                         App::new()
@@ -197,6 +200,7 @@ where
                                     jwt_secret,
                                     jwt_blacklist,
                                     server_url,
+                                    base_path,
                                     mail_options,
                                 )
                             }),

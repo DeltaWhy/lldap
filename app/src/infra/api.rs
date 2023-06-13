@@ -97,7 +97,7 @@ impl HostService {
         };
         let request_body = QueryType::build_query(variables);
         call_server_json_with_error_message::<graphql_client::Response<_>, _>(
-            "/api/graphql",
+            "api/graphql",
             Some(request_body),
             error_message,
         )
@@ -109,7 +109,7 @@ impl HostService {
         request: login::ClientLoginStartRequest,
     ) -> Result<Box<login::ServerLoginStartResponse>> {
         call_server_json_with_error_message(
-            "/auth/opaque/login/start",
+            "auth/opaque/login/start",
             Some(request),
             "Could not start authentication: ",
         )
@@ -118,7 +118,7 @@ impl HostService {
 
     pub async fn login_finish(request: login::ClientLoginFinishRequest) -> Result<(String, bool)> {
         call_server_json_with_error_message::<login::ServerLoginResponse, _>(
-            "/auth/opaque/login/finish",
+            "auth/opaque/login/finish",
             Some(request),
             "Could not finish authentication",
         )
@@ -130,7 +130,7 @@ impl HostService {
         request: registration::ClientRegistrationStartRequest,
     ) -> Result<Box<registration::ServerRegistrationStartResponse>> {
         call_server_json_with_error_message(
-            "/auth/opaque/register/start",
+            "auth/opaque/register/start",
             Some(request),
             "Could not start registration: ",
         )
@@ -141,7 +141,7 @@ impl HostService {
         request: registration::ClientRegistrationFinishRequest,
     ) -> Result<()> {
         call_server_empty_response_with_error_message(
-            "/auth/opaque/register/finish",
+            "auth/opaque/register/finish",
             Some(request),
             "Could not finish registration",
         )
@@ -150,7 +150,7 @@ impl HostService {
 
     pub async fn refresh() -> Result<(String, bool)> {
         call_server_json_with_error_message::<login::ServerLoginResponse, _>(
-            "/auth/refresh",
+            "auth/refresh",
             NO_BODY,
             "Could not start authentication: ",
         )
@@ -160,13 +160,13 @@ impl HostService {
 
     // The `_request` parameter is to make it the same shape as the other functions.
     pub async fn logout() -> Result<()> {
-        call_server_empty_response_with_error_message("/auth/logout", NO_BODY, "Could not logout")
+        call_server_empty_response_with_error_message("auth/logout", NO_BODY, "Could not logout")
             .await
     }
 
     pub async fn reset_password_step1(username: String) -> Result<()> {
         call_server_empty_response_with_error_message(
-            &format!("/auth/reset/step1/{}", url_escape::encode_query(&username)),
+            &format!("auth/reset/step1/{}", url_escape::encode_query(&username)),
             NO_BODY,
             "Could not initiate password reset",
         )
@@ -177,7 +177,7 @@ impl HostService {
         token: String,
     ) -> Result<lldap_auth::password_reset::ServerPasswordResetResponse> {
         call_server_json_with_error_message(
-            &format!("/auth/reset/step2/{}", token),
+            &format!("auth/reset/step2/{}", token),
             NO_BODY,
             "Could not validate token",
         )
@@ -186,7 +186,7 @@ impl HostService {
 
     pub async fn probe_password_reset() -> Result<bool> {
         Ok(
-            gloo_net::http::Request::get("/auth/reset/step1/lldap_unlikely_very_long_user_name")
+            gloo_net::http::Request::get("auth/reset/step1/lldap_unlikely_very_long_user_name")
                 .header("Content-Type", "application/json")
                 .send()
                 .await?
