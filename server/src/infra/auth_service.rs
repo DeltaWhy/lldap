@@ -288,7 +288,7 @@ where
         .cookie(
             Cookie::build("refresh_token", "")
                 .max_age(0.days())
-                .path("/auth")
+                .path("/")
                 .http_only(true)
                 .same_site(SameSite::Strict)
                 .finish(),
@@ -356,7 +356,7 @@ where
         .cookie(
             Cookie::build("refresh_token", refresh_token_plus_name.clone())
                 .max_age(max_age.num_days().days())
-                .path("/auth")
+                .path("/")
                 .http_only(true)
                 .same_site(SameSite::Strict)
                 .finish(),
