@@ -12,22 +12,35 @@ use crate::{
         tcp_backend_handler::*,
     },
 };
-use actix_files::{Files, NamedFile};
+// use actix::Handler;
+// use actix_files::{Files, NamedFile};
+use actix_files::Files;
 use actix_http::{header, HttpServiceBuilder};
 use actix_server::ServerBuilder;
 use actix_service::map_config;
 use actix_web::{dev::AppConfig, guard, web, App, HttpResponse, Responder};
 use anyhow::{Context, Result};
+use handlebars::Handlebars;
 use hmac::Hmac;
+use serde_json::json;
 use sha2::Sha512;
 use std::collections::HashSet;
-use std::path::PathBuf;
+// use std::path::PathBuf;
 use std::sync::RwLock;
 use tracing::info;
 
-async fn index() -> actix_web::Result<NamedFile> {
-    let path = PathBuf::from(r"app/index.html");
-    Ok(NamedFile::open(path)?)
+// async fn index() -> actix_web::Result<NamedFile> {
+//     let path = PathBuf::from(r"app/index.html");
+//     Ok(NamedFile::open(path)?)
+// }
+
+async fn index(base_path: String) -> HttpResponse {
+    let mut hb = Handlebars::new();
+    hb.register_template_file("index", "./app/index.html")
+        .unwrap();
+    let data = json!({ "base_path": base_path });
+    let body = hb.render("index", &data).unwrap();
+    HttpResponse::Ok().body(body)
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -92,6 +105,11 @@ fn http_config<Backend>(
 ) where
     Backend: TcpBackendHandler + BackendHandler + LoginHandler + OpaqueHandler + Clone + 'static,
 {
+    let base_path = if base_path.ends_with('/') {
+        base_path.trim_end_matches('/').to_string()
+    } else {
+        base_path
+    };
     let enable_password_reset = mail_options.enable_password_reset;
     cfg.app_data(web::Data::new(AppState::<Backend> {
         backend_handler: AccessControlledBackendHandler::new(backend_handler),
@@ -100,32 +118,39 @@ fn http_config<Backend>(
         server_url,
         mail_options,
     }))
-    .route(
-        format!("{}health", base_path).as_str(),
-        web::get().to(|| async { HttpResponse::Ok().finish() }),
-    )
     .service(
-        web::scope(format!("{}auth", base_path).as_str())
-            .configure(|cfg| auth_service::configure_server::<Backend>(cfg, enable_password_reset)),
+        web::scope(base_path.as_str())
+            .route(
+                "/health",
+                web::get().to(|| async { HttpResponse::Ok().finish() }),
+            )
+            .service(web::scope("/auth").configure(|cfg| {
+                auth_service::configure_server::<Backend>(cfg, enable_password_reset)
+            }))
+            // API endpoint.
+            .service(
+                web::scope("/api")
+                    .wrap(auth_service::CookieToHeaderTranslatorFactory)
+                    .configure(super::graphql::api::configure_endpoint::<Backend>),
+            )
+            .service(
+                web::resource("/pkg/lldap_app_bg.wasm.gz")
+                    .route(web::route().to(wasm_handler_compressed)),
+            )
+            .service(web::resource("/pkg/lldap_app_bg.wasm").route(web::route().to(wasm_handler)))
+            // Serve the /pkg path with the compiled WASM app.
+            .service(Files::new("/pkg", "./app/pkg"))
+            // Serve static files
+            .service(Files::new("/static", "./app/static"))
+            // Serve static fonts
+            .service(Files::new("/static/fonts", "./app/static/fonts")),
     )
-    // API endpoint.
-    .service(
-        web::scope(format!("{}api", base_path).as_str())
-            .wrap(auth_service::CookieToHeaderTranslatorFactory)
-            .configure(super::graphql::api::configure_endpoint::<Backend>),
-    )
-    .service(
-        web::resource(format!("{}pkg/lldap_app_bg.wasm.gz", base_path).as_str()).route(web::route().to(wasm_handler_compressed)),
-    )
-    .service(web::resource(format!("{}pkg/lldap_app_bg.wasm", base_path).as_str()).route(web::route().to(wasm_handler)))
-    // Serve the /pkg path with the compiled WASM app.
-    .service(Files::new(format!("{}pkg", base_path).as_str(), "./app/pkg"))
-    // Serve static files
-    .service(Files::new(format!("{}static", base_path).as_str(), "./app/static"))
-    // Serve static fonts
-    .service(Files::new(format!("{}static/fonts", base_path).as_str(), "./app/static/fonts"))
     // Default to serve index.html for unknown routes, to support routing.
-    .default_service(web::route().guard(guard::Get()).to(index));
+    .default_service(
+        web::route()
+            .guard(guard::Get())
+            .to(move || index(base_path.clone())),
+    );
 }
 
 pub(crate) struct AppState<Backend> {
